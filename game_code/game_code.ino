@@ -60,6 +60,7 @@ struct leds
 {
     byte state;
     byte previousLoc;
+    bool isVisited;
 };
 
 leds ledState[ROWS][COLUMNS];
@@ -84,6 +85,17 @@ void setLedStates(){
         {
             ledState[i][j].state = none;
             ledState[i][j].previousLoc = 0;
+            ledState[i][j].isVisited = false;
+        }
+    }
+}
+
+void clearVisitedStates() {
+    for (byte i = 0; i < ROWS; i++)
+    {
+        for (byte j = 0; j < COLUMNS; j++)
+        {
+            ledState[i][j].isVisited = false;
         }
     }
 }
@@ -102,6 +114,7 @@ void printLedStates() {
     Serial.println("=================================\n");
 }
 
+
 void setup()
 {
     setupJoystick(A0, A1, sw);
@@ -112,7 +125,7 @@ void setup()
     lc.clearDisplay(0);    // Clear the display
 
     setLedStates();
-    ledState[0][4].state = apple;
+    ledState[3][7].state = apple;
     lc.setLed(0, userY, userX, true);
     ledState[userY][userX].state = snake;
 }
@@ -127,7 +140,6 @@ void restart()
 }
 
 
-queueHeader q = initializeQueue();
 int countt = 0;
 void loop()
 {
@@ -193,7 +205,7 @@ void loop()
   // printQueue(q);
   delay(3000);
   if (countt < 2) {
-    printBFSPath();
+    getBFSPath();
   }
   countt++;
 }
@@ -212,68 +224,79 @@ void set_apple()
     lc.setLed(0, row, column, true);
     ledState[row][column].state = apple;
 }
-
-void printBFSPath() {
+queueHeader getBFSPath() {
   byte path[2];
   bfs(path, 9, 9);
+  queueHeader pathQueue = initializeQueue();
+  enQueue(pathQueue, path[0], path[1]);
 
-  while(!(path[0] == userX && path[1] == userY))
+  while(!(path[0] == userY && path[1] == userX))  
   {
     bfs(path, path[0], path[1]);
-    Serial.println("=====================================\n");
+    enQueue(pathQueue, path[0], path[1]);
   }
 
+  printQueue(pathQueue);
+  return pathQueue;
 }
 
-void bfs(byte *path, byte xAxis, byte yAxis)
-{
+void bfs(byte *path, byte yAxis, byte xAxis) {
   queueHeader q = initializeQueue();
-  enQueue(q, userX, userY);
+  enQueue(q, userY, userX); 
+  ledState[userY][userX].isVisited = true;  
   byte head[2] = {0, 0};
   int count = 0;
 
   while(head[0] != 255) {
     GetQueueHead(q, head);
-    byte x = head[0], y = head[1];
+    byte x = head[1], y = head[0];  
 
-    if (y < 7 && ledState[x][y + 1].state != snake) {
-      if (ledState[x][y + 1].state == apple || (x == xAxis && y + 1 == yAxis)) {
-        printQueue(q);
-        path[0] = x;
-        path[1] = y;
+    if (y < 7 && ledState[y + 1][x].state != snake && !ledState[y + 1][x].isVisited) {  
+      if (ledState[y + 1][x].state == apple || (y + 1 == yAxis && x == xAxis)) {  
+        path[0] = y;  
+        path[1] = x;  
+        clearVisitedStates();
+        freeQueue(q);
         return;
       }
-      enQueue(q, x, y + 1);
+      ledState[y + 1][x].isVisited = true;  
+      enQueue(q, y + 1, x);  
     }
 
-    if (y > 0 && ledState[x][y - 1].state != snake) {
-      if (ledState[x][y - 1].state == apple || (x == xAxis && y - 1 == yAxis)) {
-        printQueue(q);
-        path[0] = x;
-        path[1] = y;
+    if (y > 0 && ledState[y - 1][x].state != snake && !ledState[y - 1][x].isVisited) {  
+      if (ledState[y - 1][x].state == apple || (y - 1 == yAxis && x == xAxis)) {  
+        path[0] = y;  
+        path[1] = x;  
+        clearVisitedStates();
+        freeQueue(q);
         return;
       }
-      enQueue(q, x, y - 1);
+      ledState[y - 1][x].isVisited = true;  
+      enQueue(q, y - 1, x);  
     }
 
-    if (x < 7 && ledState[x + 1][y].state != snake) {
-      if (ledState[x + 1][y].state == apple || (x + 1 == xAxis && y == yAxis)) {
-        printQueue(q);
-        path[0] = x;
-        path[1] = y;
+    if (x < 7 && ledState[y][x + 1].state != snake && !ledState[y][x + 1].isVisited) {  
+      if (ledState[y][x + 1].state == apple || (x + 1 == xAxis && y == yAxis)) {  
+        path[0] = y;  
+        path[1] = x;  
+        clearVisitedStates();
+        freeQueue(q);
         return;
       }
-      enQueue(q, x + 1, y);
+      ledState[y][x + 1].isVisited = true;  
+      enQueue(q, y, x + 1);  
     }
 
-    if (x > 0 && ledState[x - 1][y].state != snake) {
-      if (ledState[x - 1][y].state == apple || (x - 1 == xAxis && y == yAxis)) {
-        printQueue(q);
-        path[0] = x;
-        path[1] = y;
+    if (x > 0 && ledState[y][x - 1].state != snake && !ledState[y][x - 1].isVisited) {  
+      if (ledState[y][x - 1].state == apple || (x - 1 == xAxis && y == yAxis)) {  
+        path[0] = y;  
+        path[1] = x;  
+        clearVisitedStates();
+        freeQueue(q);
         return;
       }
-      enQueue(q, x - 1, y);
+      ledState[y][x - 1].isVisited = true;  
+      enQueue(q, y, x - 1);  
     }
 
     count++;
@@ -287,6 +310,7 @@ void bfs(byte *path, byte xAxis, byte yAxis)
     dequeue(q);
   }
   // Serial.print("ggg");
+  clearVisitedStates();
   freeQueue(q);
 }
 
@@ -788,6 +812,7 @@ void print_location(byte userY, byte userX){
     Serial.print(userX);
     Serial.println(" )");
 }
+
 
 // function that return the current joystick state
 byte get_Direction(){
