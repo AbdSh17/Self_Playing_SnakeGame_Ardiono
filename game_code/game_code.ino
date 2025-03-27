@@ -61,19 +61,12 @@ typedef struct leds *led;
 
 struct leds
 {
-    byte state;
-    byte previousLoc;
-    bool isVisited;
+    byte state; // (snake, apple or none)
+    byte previousLoc; // the previous node in the snake node location
+    bool isVisited; // attribute for BFS
 };
 
 leds ledState[ROWS][COLUMNS];
-
-extern int __heap_start, *__brkval;
-int freeMemory()
-{
-    int v;
-    return (int)&v - (__brkval == 0 ? (int)&__heap_start : (int)__brkval);
-}
 
 // Switch interrupt
 void handleSwitch()
@@ -139,35 +132,15 @@ void setup()
     lc.setIntensity(0, 8); // Set brightness (0 to 15)
     lc.clearDisplay(0);    // Clear the display
 
-    setLedStates();
-    ledState[3][4].state = apple;
+    setLedStates(); // clear all states
+    ledState[3][4].state = apple; // one initial apple
     lc.setLed(0, 3, 4, true);
 
-    // ledState[7][1].state = apple;
-    // lc.setLed(0, 7, 1, true);
-
-    // ledState[1][2].state = apple;
-    // lc.setLed(0, 1, 2, true);
-
-    // ledState[5][7].state = apple;
-    // lc.setLed(0, 5, 7, true);
-
-    // ledState[4][4].state = apple;
-    // lc.setLed(0, 4, 4, true);
-
-    // ledState[6][6].state = apple;
-    // lc.setLed(0, 6, 6, true);
-
-    // ledState[0][2].state = apple;
-    // lc.setLed(0, 0, 2, true);
-
-    lc.setLed(0, userY, userX, true);
+    lc.setLed(0, userY, userX, true); // initialize the snake head position
     ledState[userY][userX].state = snake;
 
-    Serial.begin(9600);
-    delay(1000);
+    delay(1000); // wait 1 sec, then START 
     getBFSPath();
-    printStack(pathStack);
 }
 
 int count = 0;
@@ -197,13 +170,15 @@ void loop()
 
     unsigned long currentMillis = millis();
 
+    // add an apple every 'appleInterval'
     if (currentMillis - previousMillisApple >= appleInterval)
     {
         previousMillisApple = currentMillis;
         set_apple();
-        appleCount++;
+        appleCount++; // increase apple count
     }
 
+    // move the snake every 'moveInterval'
     if (currentMillis - previousMillisMove >= moveInterval)
     {
         previousMillisMove = currentMillis;
@@ -214,19 +189,15 @@ void loop()
 
         bool lost = false;
 
-        // if we reached the path, waiting for new apple to respone
+        // if we reached the path, waiting for new apple to respone (the path only return the point right before the apple, so also need to search if there's an apple in the four squres i can reach)
         if (direction == STABLE)
         {
-            printStack(pathStack);
-            Serial.print("Apple Count: ");
-            Serial.println(appleCount);
-            printLedStates();
 
-            direction = checkSurroundings(apple);
+            direction = checkSurroundings(apple); // check if there's an apple i can eat in the 4 directions
 
             if(direction != STABLE)
             {
-              appleCount--;
+              appleCount--; // if there's then i ate one
             }
 
             // if there's an apple exist and our state is stable, then move your ass and go find it
@@ -236,8 +207,10 @@ void loop()
             }
         }
 
+        // if we are moving to the right
         if (direction == RIGHT)
         {
+            // if the point above me (i'm about to go to an collapse)
             if (ledState[userY][userX + 1].state == snake)
             {
               collegianAvoidanceFlag = true;
@@ -255,26 +228,28 @@ void loop()
                 }
               }
               
-              // RIGHT
+              // UP
               else if (userY < 7 && ledState[userY + 1][userX].state != snake)
               {
                 lost = go_down();
               }
 
-              // LEFT
+              // DOWN
               else if(userY > 0 && ledState[userY - 1][userX].state != snake)
               {
                 lost = go_up();
               }
-
+              // LEFT
               else
               {
                 lost = go_left();
               }
 
-              getBFSPath();
-              count++;
+              getBFSPath(); // after avoid the collapse, find new path
+              count++; // number of collapse avoidance
             }
+
+            // if no expected collapse, move right freely
             else
             {
               collegianAvoidanceFlag = false;
@@ -284,6 +259,7 @@ void loop()
             }
         }
 
+        // if we are moving to the left
         else if (direction == LEFT)
         {
           if (ledState[userY][userX - 1].state == snake)
@@ -333,6 +309,7 @@ void loop()
             }
         }
 
+        // if we are moving to the above
         else if (direction == UP)
         {
             if (ledState[userY - 1][userX].state == snake)
@@ -382,6 +359,7 @@ void loop()
             }
         }
 
+        // if we are moving to the bellow
         else if (direction == DOWN)
         {
             if (ledState[userY + 1][userX].state == snake)
@@ -432,7 +410,7 @@ void loop()
             }
         }
 
-        if (lost || count == 20)
+        if (lost || count == 20) // if i avoid more than 20 collapse in a row (don't know why 20 tbh) then i'm bloody stuck
         {
           printGameOver();
           restart();
@@ -440,10 +418,11 @@ void loop()
     }
 }
 
+// function to add an apple every often
 void set_apple()
 {
     byte row = 1, column = 0;
-    randomSeed(50); // randomSeed(millis());
+    randomSeed(50);
 
     while (1)
     {
@@ -457,6 +436,7 @@ void set_apple()
     ledState[row][column].state = apple;
 }
 
+// get where i suppose to go with the next move
 byte getDirection()
 {
     byte head[2]; // an array will be modified to get head[1], head[0] = Y,X
@@ -491,16 +471,13 @@ byte getDirection()
     return STABLE; // if there's an error and everything equal;
 }
 
-// function to fill the global stack (pat stack) with the path
+// function to fill the global stack (pat stack) with the complete path to the apple
 void getBFSPath()
 {
     byte path[2];                      // An array will be sent with the function and modified inside the function;
     bfs(path, 9, 9);                   // bfs, modify the path, make the goal X,Y is 9,9 (out of range) so it will only stop when find an apple
     freeStack(pathStack);              // empty the global stack so we erfil again with new paths
     push(pathStack, path[0], path[1]); // push first path, the point right before the goal (apple)
-
-    Serial.print("GETBFSFUNCTION");
-    printStack(pathStack);
 
     // while the path is not the current place i'm in, keep gives the new paths
     /*
@@ -606,6 +583,7 @@ void bfs(byte *path, byte yAxis, byte xAxis) {
     freeQueue(q);
 }
 
+// check any Surroundings that not equal the state (apple, snake)
 byte checkSurroundingsForNotState(byte state)
 {
     if (userY < 7 && ledState[userY + 1][userX].state != state) // 1- if not edge, 2- is an apple
@@ -633,6 +611,7 @@ byte checkSurroundingsForNotState(byte state)
     return STABLE;
 }
 
+// check any Surroundings that equal the state and in the same direction as me (apple, snake)
 byte checkSurroundingsWithDirection(byte state, byte direction)
 {
     // DOWN
@@ -661,34 +640,35 @@ byte checkSurroundingsWithDirection(byte state, byte direction)
     return STABLE;
 }
 
-
+// check any Surroundings that equal the state (apple, snake)
 byte checkSurroundings(byte state)
 {
-    if (userY < 7 && ledState[userY + 1][userX].state == state) // 1- if not edge, 2- is an apple
+    if (userY < 7 && ledState[userY + 1][userX].state == state) // 1- if not edge, 2- is equal to the state (apple, snake)
     {
         return DOWN;
     }
 
     // UP
-    else if (userY > 0 && ledState[userY - 1][userX].state == state) // 1- if not edge, 2- is an apple
+    else if (userY > 0 && ledState[userY - 1][userX].state == state) // 1- if not edge, 2- is equal to the state (apple, snake)
     {
         return UP;
     }
 
     // LEFT
-    else if (userX > 0 && ledState[userY][userX - 1].state == state) // 1- if not edge, 2- is an apple
+    else if (userX > 0 && ledState[userY][userX - 1].state == state) // 1- if not edge, 2- is equal to the state (apple, snake)
     {
         return LEFT;
     }
 
     // RIGHT
-    else if (userX < 7 && ledState[userY][userX + 1].state == state) // 1- if not edge, 2- is an apple
+    else if (userX < 7 && ledState[userY][userX + 1].state == state) // 1- if not edge, 2- equal to the state (apple, snake)
     {
         return RIGHT;
     }
-    return STABLE;
+    return STABLE; // else
 }
 
+// function to switch between (x0,y0) and (x1,y1)
 void switchPoints(byte userX0, byte userY0, byte userX1, byte userY1)
 {
     lc.setLed(0, userY0, userX0, false);
@@ -703,6 +683,7 @@ void switchPoints(byte userX0, byte userY0, byte userX1, byte userY1)
 bool go_right()
 {
 
+    // if is an edge
     if (userX == 7)
     {
         return false;
@@ -938,7 +919,6 @@ bool go_up()
         ledState[userY + 1][userX].state = snake;
         ledState[userY][userX].state = snake;
         ledState[userY][userX].previousLoc = DOWN;
-        // getBFSPath();
         length++;
     }
 
