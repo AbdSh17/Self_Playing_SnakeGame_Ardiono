@@ -24,7 +24,7 @@ Self-playing **Snake game** built with **Arduino UNO** using a **MAX7219 8x8 LED
 ---
 
 ## Game Demo
-**[Add demo video link or embed here]**
+**...**
 
 ---
 
